@@ -93,9 +93,11 @@ func Redirect2OpenlistLink(c *gin.Context) {
 
 	// 4 如果是远程地址 (strm), 重定向处理
 	if urls.IsHttpRemote(embyPath) {
-		finalPath := config.C.Emby.Strm.MapPath(embyPath)
-		finalPath = getFinalRedirectLink(finalPath, c.Request.Header.Clone())
-		logs.Success("重定向 strm: %s", finalPath)
+		originLink := config.C.Emby.Strm.MapPath(embyPath)
+		if config.C.Openlist.EnableSign {
+			originLink = getOpenlistSignedLink(originLink, c.Request.Header.Clone())
+		}
+		finalPath := getFinalRedirectLink(originLink, c.Request.Header.Clone())
 		c.Header(cache.HeaderKeyExpired, cache.Duration(time.Minute*10))
 		c.Redirect(http.StatusTemporaryRedirect, finalPath)
 
@@ -261,8 +263,52 @@ func getFinalRedirectLink(originLink string, header http.Header) string {
 		logs.Warn("内部重定向失败: %v", err)
 		return originLink
 	}
-
+	
+	logs.Success("重定向 strm: %s", finalLink)
 	return finalLink
+}
+
+// getOpenlistSignedLink 通过 OpenList API 获取资源链接
+//
+// originLink 是经过 strm.path-map 映射后的链接。OpenList 的下载路由前缀
+// 不属于文件路径, 因此仅在构造 API path 时移除该前缀; 是否调用 API 由配置控制。
+func getOpenlistSignedLink(originLink string, header http.Header) string {
+	u, err := url.Parse(originLink)
+	if err != nil {
+		logs.Warn("解析 OpenList 资源链接失败: %v, link: %s", err, originLink)
+		return originLink
+	}
+
+	encodedPath := u.EscapedPath()
+	if strings.HasPrefix(encodedPath, "/d/") {
+		encodedPath = strings.TrimPrefix(encodedPath, "/d")
+	}
+	if encodedPath == "" || encodedPath == "/" {
+		logs.Warn("OpenList 资源链接缺少文件路径: %s", originLink)
+		return originLink
+	}
+
+	openlistPath, err := url.PathUnescape(encodedPath)
+	if err != nil {
+		logs.Warn("解析 OpenList 资源路径失败: %v, link: %s", err, originLink)
+		return originLink
+	}
+	if openlistPath == "" || openlistPath == "/" {
+		logs.Warn("OpenList 资源路径为空: %s", originLink)
+		return originLink
+	}
+
+	res := openlist.FetchResource(openlist.FetchInfo{
+		Path:   openlistPath,
+		Header: header,
+	})
+	if res.Code != http.StatusOK || strs.AnyEmpty(res.Data.Url) {
+		logs.Warn("获取 OpenList 签名链接失败, code: %d, msg: %s, path: %s", res.Code, res.Msg, openlistPath)
+		return originLink
+	}
+
+	logs.Info("获取 OpenList 签名链接成功: %s", res.Data.Url)
+	return res.Data.Url
 }
 
 // shouldRedirectDirectly 判断客户端请求的主机名是否与配置的 Emby 服务器主机名一致
