@@ -68,6 +68,7 @@ func TransferPlaybackInfo(c *gin.Context) {
 	c.Request.Header.Del("Accept-Encoding")
 	originRequestBody := c.Request.Body
 	c.Request.Body = io.NopCloser(bytes.NewBufferString(PlaybackCommonPayload))
+	c.Request.Header.Set("Content-Type", "application/json")
 	res, respHeader := RawFetch(itemInfo.PlaybackInfoUri, c.Request.Method, c.Request.Header, c.Request.Body)
 	if res.Code != http.StatusOK {
 		checkErr(c, errors.New(res.Msg))
