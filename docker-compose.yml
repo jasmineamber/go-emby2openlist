@@ -12,7 +12,7 @@ services:
     container_name: go-emby2openlist
     restart: always
     volumes:
-      - ./config.yml:/app/config.yml
+      - ./config/config.yml:/app/config/config.yml
       - ./ssl:/app/ssl
       - ./custom-js:/app/custom-js
       - ./custom-css:/app/custom-css

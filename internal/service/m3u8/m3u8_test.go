@@ -9,7 +9,7 @@ import (
 )
 
 func TestPlaylistCache(t *testing.T) {
-	config.ReadFromFile("../../../config.yml")
+	config.ReadFromFile("../../../config/config.yml")
 	info := m3u8.Info{
 		OpenlistPath: "/运动/安小雨跳绳课 (2021)/安小雨跳绳课.S01E01.3000次.25分钟.1080p.mp4",
 		TemplateId:   "FHD",

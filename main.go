@@ -27,7 +27,7 @@ func main() {
 
 	dataRoot := parseFlag()
 
-	if err := config.ReadFromFile(filepath.Join(dataRoot, "config.yml")); err != nil {
+	if err := config.ReadFromFile(filepath.Join(dataRoot, "config", "config.yml")); err != nil {
 		log.Fatal(err)
 	}
 

@@ -169,10 +169,11 @@ cd go-emby2openlist
 > 示例配置为完整版配置，首次部署可以参照[核心配置](https://github.com/AmbitiousJun/go-emby2openlist/issues/108#issuecomment-2928599051)优先跑通程序，再按需补充其他配置
 
 ```shell
-cp config-example.yml config.yml
+mkdir -p config
+cp config-example.yml config/config.yml
 ```
 
-3. 根据自己的服务器配置好 `config.yml` 文件
+3. 根据自己的服务器配置好 `config/config.yml` 文件
 
 关于路径映射的配置示例图：
 
@@ -197,7 +198,7 @@ docker logs -f go-emby2openlist -n 1000
 7. 修改配置的时候需要重新启动容器
 
 ```shell
-# 修改 config.yml ...
+# 修改 config/config.yml ...
 docker-compose restart
 ```
 
@@ -205,7 +206,7 @@ docker-compose restart
 
 ```shell
 # 获取到最新代码后, 可以检查一下 config-example.yml 是否有新增配置
-# 及时同步自己的 config.yml 才能用上新功能
+# 及时同步自己的 config/config.yml 才能用上新功能
 
 # 更新到正式版
 docker-compose down
@@ -233,7 +234,7 @@ docker image prune -f
 
 > 示例配置为完整版配置，首次部署可以参照[核心配置](https://github.com/AmbitiousJun/go-emby2openlist/issues/108#issuecomment-2928599051)优先跑通程序，再按需补充其他配置
 
-参考[示例配置](https://github.com/AmbitiousJun/go-emby2openlist/blob/v2.8.2/config-example.yml)，配置好自己的服务器信息，保存并命名为 `config.yml`
+参考[示例配置](https://github.com/AmbitiousJun/go-emby2openlist/blob/v2.8.2/config-example.yml)，配置好自己的服务器信息，保存并命名为 `config/config.yml`
 
 2. 创建 docker-compose 文件
 
@@ -252,7 +253,7 @@ services:
     container_name: go-emby2openlist
     restart: always
     volumes:
-      - ./config.yml:/app/config.yml
+      - ./config/config.yml:/app/config/config.yml
       - ./ssl:/app/ssl
       - ./custom-js:/app/custom-js
       - ./custom-css:/app/custom-css
@@ -274,7 +275,7 @@ docker-compose up -d --build
 **使用方式：**
 
 1. 将证书和私钥放到程序根目录下的 `ssl` 目录中
-2. 再将两个文件的文件名分别配置到 `config.yml` 中
+2. 再将两个文件的文件名分别配置到 `config/config.yml` 中
 
 **特别说明：**
 

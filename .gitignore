@@ -1,4 +1,4 @@
-config.yml
+config/config.yml
 *debug*
 ssl/*crt
 ssl/*key
