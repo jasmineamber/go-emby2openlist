@@ -41,7 +41,7 @@ func getEmbyFileLocalPath(itemInfo ItemInfo) (string, error) {
 		header = http.Header{itemInfo.ApiKeyName: []string{itemInfo.ApiKey}}
 	case Query:
 		// 如果是 query 格式的 api key, 则往请求头中补充信息
-		header = http.Header{HeaderFullAuthName: []string{"Token=" + itemInfo.ApiKey}}
+		header = http.Header{"X-Emby-Token": []string{itemInfo.ApiKey}}
 	}
 
 	innerRequest := func(method string) (*http.Response, error) {
