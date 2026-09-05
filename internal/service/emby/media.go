@@ -376,15 +376,30 @@ func detectSubtitleStreamsDeliveryUrl(source *jsons.Item, apiKey string) {
 			return nil
 		}
 
-		// DeliveryMethod 为 External 时, Emby 默认会提供 DeliveryUrl 字段, 无需手动修改
+		// DeliveryMethod 为 External 时, Emby 默认会提供 DeliveryUrl 字段。
+		// 但代理请求的设备配置可能让 Emby 返回 Stream.vtt；临时统一使用
+		// Stream.srt，以兼容 jellyfin-mpv-shim 的外挂字幕渲染。
 		deliveryMethod, _ := value.Attr("DeliveryMethod").String()
 		if deliveryMethod == "External" {
+			deliveryUrl, ok := value.Attr("DeliveryUrl").String()
+			if !ok || deliveryUrl == "" {
+				return nil
+			}
+			u, err := url.Parse(deliveryUrl)
+			if err != nil {
+				return nil
+			}
+			ext := filepath.Ext(u.Path)
+			if strings.EqualFold(ext, ".vtt") {
+				u.Path = strings.TrimSuffix(u.Path, ext) + ".srt"
+				value.Put("DeliveryUrl", jsons.FromValue(u.String()))
+			}
 			return nil
 		}
 		value.Put("DeliveryMethod", jsons.FromValue("External"))
 
 		subIndex, _ := value.Attr("Index").Int()
-		u, _ := url.Parse(fmt.Sprintf("/Videos/%s/%s/Subtitles/%d/0/Stream.vtt?api_key=%s", itemId, id, subIndex, apiKey))
+		u, _ := url.Parse(fmt.Sprintf("/Videos/%s/%s/Subtitles/%d/0/Stream.srt?api_key=%s", itemId, id, subIndex, apiKey))
 		value.Put("DeliveryUrl", jsons.FromValue(u.String()))
 		return nil
 	})
