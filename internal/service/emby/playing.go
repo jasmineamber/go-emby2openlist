@@ -30,6 +30,7 @@ func PlayingStoppedHelper(c *gin.Context) {
 	}
 
 	// 代理原始 Stopped 接口
+	requestHeader := c.Request.Header.Clone()
 	ProxyOrigin(c)
 
 	// 提取 api apiKey
@@ -54,7 +55,7 @@ func PlayingStoppedHelper(c *gin.Context) {
 	body.Put("ItemId", jsons.FromValue(itemId))
 	body.Put("PlaySessionId", jsons.FromValue(randoms.RandomHex(32)))
 	body.Put("PositionTicks", jsons.FromValue(bodyJson.Attr("PositionTicks").Val()))
-	go sendPlayingProgress(kType, kName, apiKey, body)
+	go sendPlayingProgress(kType, kName, apiKey, requestHeader, body)
 }
 
 // PlayingProgressHelper 拦截 Progress 请求, 如果进度报告为 0, 认为是无效请求
@@ -78,16 +79,24 @@ func PlayingProgressHelper(c *gin.Context) {
 }
 
 // sendPlayingProgress 发送辅助播放进度请求
-func sendPlayingProgress(kType ApiKeyType, kName, apiKey string, body *jsons.Item) {
+func sendPlayingProgress(kType ApiKeyType, kName, apiKey string, requestHeader http.Header, body *jsons.Item) {
 	if body == nil {
 		return
 	}
 
 	inner := func(remote string) error {
-		header := make(http.Header)
+		header := requestHeader.Clone()
+		if header == nil {
+			header = make(http.Header)
+		}
+		header.Del("Content-Length")
+		header.Del("Accept-Encoding")
 		header.Set("Content-Type", "application/json")
 		if kType == Query {
 			remote += fmt.Sprintf("?%s=%s", kName, apiKey)
+			if apiKey != "" && header.Get(HeaderAuthName) == "" && header.Get(HeaderFullAuthName) == "" && header.Get(QueryTokenName) == "" {
+				header.Set(QueryTokenName, apiKey)
+			}
 		} else {
 			header.Set(kName, apiKey)
 		}

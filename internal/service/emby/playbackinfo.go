@@ -365,7 +365,7 @@ func useCacheSpacePlaybackInfo(c *gin.Context, itemInfo ItemInfo) bool {
 	}
 
 	// 如果是单个查询, 则手动请求一次全量
-	if _, err := fetchFullPlaybackInfo(itemInfo); err != nil {
+	if _, err := fetchFullPlaybackInfo(itemInfo, c.Request.Header); err != nil {
 		logs.Error("更新缓存空间 PlaybackInfo 信息异常: %v", err)
 		c.String(http.StatusInternalServerError, "查无缓存, 请稍后尝试重新播放")
 		return true
@@ -443,7 +443,7 @@ func LoadCacheItems(c *gin.Context) {
 	}
 
 	// 缓存空间中没有当前 Item 的 PlaybackInfo 数据, 手动请求
-	bodyJson, err := fetchFullPlaybackInfo(itemInfo)
+	bodyJson, err := fetchFullPlaybackInfo(itemInfo, c.Request.Header)
 	if err != nil {
 		logs.Warn("更新 Items 缓存异常: %v", err)
 		return
@@ -452,7 +452,7 @@ func LoadCacheItems(c *gin.Context) {
 }
 
 // fetchFullPlaybackInfo 请求全量的 PlaybackInfo 信息
-func fetchFullPlaybackInfo(itemInfo ItemInfo) (*jsons.Item, error) {
+func fetchFullPlaybackInfo(itemInfo ItemInfo, requestHeader http.Header) (*jsons.Item, error) {
 	u, err := url.Parse(config.ServerInternalRequestHost() + itemInfo.PlaybackInfoUri)
 	if err != nil {
 		return nil, fmt.Errorf("PlaybackInfo 地址异常: %v, uri: %s", err, itemInfo.PlaybackInfoUri)
@@ -462,11 +462,7 @@ func fetchFullPlaybackInfo(itemInfo ItemInfo) (*jsons.Item, error) {
 	u.RawQuery = q.Encode()
 
 	reqBody := io.NopCloser(bytes.NewBufferString(PlaybackCommonPayload))
-	header := make(http.Header)
-	header.Set("Content-Type", "text/plain")
-	if itemInfo.ApiKeyType == Header {
-		header.Set(itemInfo.ApiKeyName, itemInfo.ApiKey)
-	}
+	header := buildPlaybackInfoRequestHeader(itemInfo, requestHeader)
 	resp, err := https.Post(u.String()).Header(header).Body(reqBody).Do()
 	if err != nil {
 		return nil, fmt.Errorf("获取全量 PlaybackInfo 失败: %v", err)
@@ -481,6 +477,25 @@ func fetchFullPlaybackInfo(itemInfo ItemInfo) (*jsons.Item, error) {
 		return nil, fmt.Errorf("获取全量 PlaybackInfo 失败: %v", err)
 	}
 	return bodyJson, nil
+}
+
+// buildPlaybackInfoRequestHeader 构造内部 PlaybackInfo 请求头
+func buildPlaybackInfoRequestHeader(itemInfo ItemInfo, requestHeader http.Header) http.Header {
+	header := requestHeader.Clone()
+	if header == nil {
+		header = make(http.Header)
+	}
+	header.Del("Content-Length")
+	header.Del("Accept-Encoding")
+	header.Set("Content-Type", "application/json")
+	if itemInfo.ApiKeyType == Header {
+		header.Set(itemInfo.ApiKeyName, itemInfo.ApiKey)
+	} else if itemInfo.ApiKey != "" && header.Get(HeaderAuthName) == "" && header.Get(HeaderFullAuthName) == "" && header.Get(QueryTokenName) == "" {
+		// The token is also present in the query string, but some Emby versions
+		// only accept the token when it is sent as a request header.
+		header.Set(QueryTokenName, itemInfo.ApiKey)
+	}
+	return header
 }
 
 // calcPlaybackInfoSpaceCacheKey 根据请求的 item 信息计算 PlaybackInfo 在缓存空间中的 key

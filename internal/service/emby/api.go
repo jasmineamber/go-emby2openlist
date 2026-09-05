@@ -2,6 +2,7 @@ package emby
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -50,6 +51,12 @@ func RawFetch(uri, method string, header http.Header, body io.ReadCloser) (model
 		return model.HttpRes[*jsons.Item]{Code: http.StatusBadRequest, Msg: "请求发送失败: " + err.Error()}, nil
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return model.HttpRes[*jsons.Item]{
+			Code: resp.StatusCode,
+			Msg:  fmt.Sprintf("Emby 返回错误状态码: %d", resp.StatusCode),
+		}, resp.Header
+	}
 
 	// 读取响应
 	result, err := jsons.Read(resp.Body)
