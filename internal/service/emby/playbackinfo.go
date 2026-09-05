@@ -50,6 +50,7 @@ func TransferPlaybackInfo(c *gin.Context) {
 	if checkErr(c, err) {
 		return
 	}
+	excludePathRewrite := config.C.Emby.ShouldExcludePlaybackPath(c.GetHeader("User-Agent"))
 
 	// 如果是远程资源, 直接代理到源服务器
 	if handleSpecialPlayback(c, itemInfo) {
@@ -59,7 +60,7 @@ func TransferPlaybackInfo(c *gin.Context) {
 
 	// 如果是指定 MediaSourceId 的 PlaybackInfo 信息, 就从缓存空间中获取
 	msInfo := itemInfo.MsInfo
-	if useCacheSpacePlaybackInfo(c, itemInfo) {
+	if useCacheSpacePlaybackInfo(c, itemInfo, excludePathRewrite) {
 		c.Header(cache.HeaderKeyExpired, "-1")
 		return
 	}
@@ -117,6 +118,8 @@ func TransferPlaybackInfo(c *gin.Context) {
 			return nil
 		}
 
+		ir, _ := source.Attr("IsRemote").Bool()
+
 		// 转换直链链接
 		source.Put("SupportsDirectPlay", jsons.FromValue(true))
 		source.Put("SupportsDirectStream", jsons.FromValue(true))
@@ -128,6 +131,13 @@ func TransferPlaybackInfo(c *gin.Context) {
 
 		// path 解码
 		if path, ok := source.Attr("Path").String(); ok {
+			if ir && !excludePathRewrite {
+				path = config.C.Emby.Strm.MapPath(path)
+				if config.C.Openlist.EnableSign {
+					path = getOpenlistSignedLink(path, c.Request.Header.Clone())
+				}
+				path = getFinalRedirectLink(path, c.Request.Header.Clone())
+			}
 			source.Attr("Path").Set(urls.Unescape(path))
 		}
 
@@ -137,7 +147,6 @@ func TransferPlaybackInfo(c *gin.Context) {
 		source.DelKey("TranscodingContainer")
 
 		// 如果是远程资源, 不获取转码地址
-		ir, _ := source.Attr("IsRemote").Bool()
 		if ir {
 			// 通知 emby 解析远程媒体信息
 			go sendOpenStreamPlaybackInfoReqToOrigin(itemInfo)
@@ -164,7 +173,7 @@ func TransferPlaybackInfo(c *gin.Context) {
 		c.Header(cache.HeaderKeyExpired, cache.Duration(time.Hour*12))
 		// 将请求结果缓存到指定缓存空间下
 		c.Header(cache.HeaderKeySpace, PlaybackCacheSpace)
-		c.Header(cache.HeaderKeySpaceKey, calcPlaybackInfoSpaceCacheKey(itemInfo))
+		c.Header(cache.HeaderKeySpaceKey, calcPlaybackInfoSpaceCacheKey(itemInfo, excludePathRewrite))
 	}()
 
 	// 收集异步请求的转码资源信息
@@ -235,7 +244,7 @@ func handleSpecialPlayback(c *gin.Context, itemInfo ItemInfo) bool {
 //
 //	先判断缓存空间是否有缓存, 没有缓存返回 false, 由主函数请求全量信息并缓存
 //	有缓存则直接返回缓存中的全量信息
-func useCacheSpacePlaybackInfo(c *gin.Context, itemInfo ItemInfo) bool {
+func useCacheSpacePlaybackInfo(c *gin.Context, itemInfo ItemInfo, excludePathRewrite bool) bool {
 	if c == nil {
 		return false
 	}
@@ -341,7 +350,7 @@ func useCacheSpacePlaybackInfo(c *gin.Context, itemInfo ItemInfo) bool {
 	}
 
 	// 1 查询缓存空间
-	spaceCache, ok := getPlaybackInfoByCacheSpace(itemInfo)
+	spaceCache, ok := getPlaybackInfoByCacheSpace(itemInfo, excludePathRewrite)
 	if ok {
 		// 未传递 MediaSourceId, 返回整个缓存数据
 		if itemInfo.MsInfo.Empty {
@@ -371,7 +380,7 @@ func useCacheSpacePlaybackInfo(c *gin.Context, itemInfo ItemInfo) bool {
 		return true
 	}
 
-	return useCacheSpacePlaybackInfo(c, itemInfo)
+	return useCacheSpacePlaybackInfo(c, itemInfo, excludePathRewrite)
 }
 
 // LoadCacheItems 拦截并代理 items 接口
@@ -387,6 +396,7 @@ func LoadCacheItems(c *gin.Context) {
 		return
 	}
 	resJson := res.Data
+	excludePathRewrite := config.C.Emby.ShouldExcludePlaybackPath(c.GetHeader("User-Agent"))
 
 	// path 参数解码
 	if path, ok := resJson.Attr("Path").String(); ok {
@@ -434,7 +444,7 @@ func LoadCacheItems(c *gin.Context) {
 	}
 
 	// 获取附带转码信息的 PlaybackInfo 数据
-	spaceCache, ok := getPlaybackInfoByCacheSpace(itemInfo)
+	spaceCache, ok := getPlaybackInfoByCacheSpace(itemInfo, excludePathRewrite)
 	if ok {
 		cacheBody, err := spaceCache.JsonBody()
 		if err == nil && coverMediaSources(cacheBody) {
@@ -499,13 +509,17 @@ func buildPlaybackInfoRequestHeader(itemInfo ItemInfo, requestHeader http.Header
 }
 
 // calcPlaybackInfoSpaceCacheKey 根据请求的 item 信息计算 PlaybackInfo 在缓存空间中的 key
-func calcPlaybackInfoSpaceCacheKey(itemInfo ItemInfo) string {
-	return itemInfo.Id + "_" + itemInfo.ApiKey
+func calcPlaybackInfoSpaceCacheKey(itemInfo ItemInfo, excludePathRewrite bool) string {
+	pathMode := "path-mapped"
+	if excludePathRewrite {
+		pathMode = "path-original"
+	}
+	return itemInfo.Id + "_" + itemInfo.ApiKey + "_" + pathMode
 }
 
 // getPlaybackInfoByCacheSpace 从缓存空间中获取 PlaybackInfo 信息
-func getPlaybackInfoByCacheSpace(itemInfo ItemInfo) (cache.RespCache, bool) {
-	spaceCache, ok := cache.GetSpaceCache(PlaybackCacheSpace, calcPlaybackInfoSpaceCacheKey(itemInfo))
+func getPlaybackInfoByCacheSpace(itemInfo ItemInfo, excludePathRewrite bool) (cache.RespCache, bool) {
+	spaceCache, ok := cache.GetSpaceCache(PlaybackCacheSpace, calcPlaybackInfoSpaceCacheKey(itemInfo, excludePathRewrite))
 	if !ok {
 		return nil, false
 	}

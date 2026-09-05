@@ -28,6 +28,11 @@ emby:
     # 启用, 程序会在内部访问 strm 远程地址并重定向到最终地址后, 再重定向给客户端
     # 禁用, 程序会将 strm 的原始地址直接重定向给客户端
     internal-redirect-enable: false
+  playback: # PlaybackInfo 配置
+    # 命中任意 User-Agent 片段时, 不修改远程资源的 Path
+    # 匹配不区分大小写, 每项填写一个 User-Agent 片段
+    exclude-user-agents:
+      #- Hills Windows
   # emby 下载接口处理策略
   #    403: 禁用下载接口, 返回 403 响应
   # origin: 代理到源服务器

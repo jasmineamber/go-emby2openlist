@@ -53,6 +53,8 @@ type Emby struct {
 	ImagesQuality int `yaml:"images-quality"`
 	// Strm strm 配置
 	Strm *Strm `yaml:"strm"`
+	// Playback PlaybackInfo 配置
+	Playback *PlaybackConfig `yaml:"playback"`
 	// DownloadStrategy 下载接口响应策略
 	DownloadStrategy DlStrategy `yaml:"download-strategy"`
 	// LocalMediaRoots 本地媒体根路径
@@ -94,6 +96,13 @@ func (e *Emby) Init() error {
 		return fmt.Errorf("emby.strm 配置错误: %v", err)
 	}
 
+	if e.Playback == nil {
+		e.Playback = new(PlaybackConfig)
+	}
+	if err := e.Playback.Init(); err != nil {
+		return fmt.Errorf("emby.playback 配置错误: %v", err)
+	}
+
 	e.DownloadStrategy = DlStrategy(strings.TrimSpace(string(e.DownloadStrategy)))
 	if _, ok := validDlStrategy[e.DownloadStrategy]; !ok {
 		return fmt.Errorf("emby.download-strategy 配置错误, 有效值: %v", maps.Keys(validDlStrategy))
@@ -126,6 +135,46 @@ func (e *Emby) IsLocalMediaPath(p string) bool {
 		}
 	}
 
+	return false
+}
+
+// ShouldExcludePlaybackPath 判断指定客户端是否跳过远程 PlaybackInfo Path 改写
+func (e *Emby) ShouldExcludePlaybackPath(userAgent string) bool {
+	return e != nil && e.Playback != nil && e.Playback.ExcludesUserAgent(userAgent)
+}
+
+// PlaybackConfig PlaybackInfo 配置
+type PlaybackConfig struct {
+	// ExcludeUserAgents 命中其中任意 User-Agent 片段时, 跳过远程 Path 改写
+	ExcludeUserAgents []string `yaml:"exclude-user-agents"`
+
+	excludeUserAgents []string
+}
+
+// Init 配置初始化
+func (p *PlaybackConfig) Init() error {
+	p.excludeUserAgents = make([]string, 0, len(p.ExcludeUserAgents))
+	for _, userAgent := range p.ExcludeUserAgents {
+		userAgent = strings.ToLower(strings.TrimSpace(userAgent))
+		if userAgent == "" {
+			continue
+		}
+		p.excludeUserAgents = append(p.excludeUserAgents, userAgent)
+	}
+	return nil
+}
+
+// ExcludesUserAgent 判断 User-Agent 是否包含任意排除片段, 忽略大小写
+func (p *PlaybackConfig) ExcludesUserAgent(userAgent string) bool {
+	if p == nil {
+		return false
+	}
+	userAgent = strings.ToLower(userAgent)
+	for _, fragment := range p.excludeUserAgents {
+		if strings.Contains(userAgent, fragment) {
+			return true
+		}
+	}
 	return false
 }
 
