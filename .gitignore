@@ -9,3 +9,6 @@ openlist-local-tree
 /lib/
 dist
 **/node_modules/
+.playwright-cli/
+.playwright-mcp/
+go-emby2openlist.exe
