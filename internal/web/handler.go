@@ -18,11 +18,6 @@ const MatchRouteKey = "matchRoute"
 
 // globalDftHandler 全局默认兜底的请求处理器
 func globalDftHandler(c *gin.Context) {
-	if c.Request.Method == http.MethodHead {
-		c.String(http.StatusOK, "")
-		return
-	}
-
 	if handleWebStatic(c) {
 		return
 	}

@@ -41,6 +41,7 @@ func ProxySocket() func(*gin.Context) {
 		proxy.Director = func(r *http.Request) {
 			r.URL.Scheme = u.Scheme
 			r.URL.Host = u.Host
+			rewriteEmbyWebSocketPath(r)
 		}
 	}
 
@@ -48,6 +49,16 @@ func ProxySocket() func(*gin.Context) {
 		once.Do(initFunc)
 		proxy.ServeHTTP(c.Writer, c.Request)
 	}
+}
+
+func rewriteEmbyWebSocketPath(r *http.Request) {
+	if r == nil || r.URL == nil || !strings.EqualFold(r.URL.Path, "/socket") {
+		return
+	}
+
+	// Emby uses /embywebsocket while its web client connects to /socket.
+	r.URL.Path = "/embywebsocket"
+	r.URL.RawPath = ""
 }
 
 // HandleImages 处理图片请求

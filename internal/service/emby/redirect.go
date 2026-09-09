@@ -109,17 +109,7 @@ func Redirect2OpenlistLink(c *gin.Context) {
 
 	// 5 如果是本地地址
 	if config.C.Emby.IsLocalMediaPath(embyPath) {
-		if shouldRedirectDirectly(c, config.C.Emby.Host) {
-			logs.Info("本地媒体: %s, 检测到 Emby 服务端与 ge2o 同源: %s, 重定向处理", embyPath, config.C.Emby.Host)
-			c.Redirect(http.StatusTemporaryRedirect, config.C.Emby.Host+c.Request.RequestURI)
-			return
-		}
-		// 如果是外网，由于无法直连内网端口，我们返回原有的 original 路径进行代理回源播放
-		// （因为有底层的 Context 机制保护，所以即使代理也不会发生内存暴涨）
-		logs.Info("本地媒体: %s, 代理回源", embyPath)
-		newUri := strings.Replace(c.Request.RequestURI, "stream", "original", 1)
-		newUri = strings.Replace(newUri, "universal", "original", 1)
-		c.Redirect(http.StatusTemporaryRedirect, newUri)
+		proxyLocalMedia(c, embyPath)
 		return
 	}
 
@@ -177,6 +167,19 @@ func Redirect2OpenlistLink(c *gin.Context) {
 	}
 
 	checkErr(c, fmt.Errorf("获取直链失败: %s", allErrors.String()))
+}
+
+// proxyLocalMedia 保留本地媒体原始请求路径回源。
+// Jellyfin 的音频资源没有通用的 original 端点，视频也应由 Jellyfin 自己决定直放或转码。
+func proxyLocalMedia(c *gin.Context, embyPath string) {
+	if shouldRedirectDirectly(c, config.C.Emby.Host) {
+		logs.Info("本地媒体: %s, 检测到 Emby 服务端与 ge2o 同源: %s, 重定向处理", embyPath, config.C.Emby.Host)
+		c.Redirect(http.StatusTemporaryRedirect, config.C.Emby.Host+c.Request.RequestURI)
+		return
+	}
+
+	logs.Info("本地媒体: %s, 保留原始路径代理回源", embyPath)
+	ProxyOrigin(c)
 }
 
 // ProxyOriginalResource 拦截 original 接口
@@ -263,7 +266,7 @@ func getFinalRedirectLink(originLink string, header http.Header) string {
 		logs.Warn("内部重定向失败: %v", err)
 		return originLink
 	}
-	
+
 	logs.Success("重定向 strm: %s", finalLink)
 	return finalLink
 }
