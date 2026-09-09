@@ -4,25 +4,39 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/AmbitiousJun/go-emby2openlist/v2/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
-func TestRewriteEmbyWebSocketPath(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/socket?api_key=test", nil)
-	rewriteEmbyWebSocketPath(req)
+func TestProxySocketPreservesJellyfinSocketPath(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/socket" {
+			t.Errorf("unexpected upstream path: %s", r.URL.Path)
+		}
+		if r.URL.RawQuery != "api_key=test" {
+			t.Errorf("unexpected upstream query: %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer upstream.Close()
 
-	if req.URL.Path != "/embywebsocket" {
-		t.Fatalf("unexpected upstream path: %s", req.URL.Path)
+	previousConfig := config.C
+	config.C = &config.Config{Emby: &config.Emby{Host: upstream.URL}}
+	defer func() { config.C = previousConfig }()
+
+	router := gin.New()
+	router.Any("/*path", ProxySocket())
+	proxyServer := httptest.NewServer(router)
+	defer proxyServer.Close()
+
+	resp, err := http.Get(proxyServer.URL + "/socket?api_key=test")
+	if err != nil {
+		t.Fatalf("request through socket proxy failed: %v", err)
 	}
-	if req.URL.RawQuery != "api_key=test" {
-		t.Fatalf("query was changed: %s", req.URL.RawQuery)
-	}
-}
+	defer resp.Body.Close()
 
-func TestRewriteEmbyWebSocketPathLeavesOtherPaths(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/other", nil)
-	rewriteEmbyWebSocketPath(req)
-
-	if req.URL.Path != "/other" {
-		t.Fatalf("unexpected path rewrite: %s", req.URL.Path)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected upstream status %d, got %d", http.StatusBadRequest, resp.StatusCode)
 	}
 }
